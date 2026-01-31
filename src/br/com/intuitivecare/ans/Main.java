@@ -1,5 +1,6 @@
 package br.com.intuitivecare.ans;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
@@ -8,13 +9,17 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import br.com.intuitivecare.ans.util.FileProcessor;
+import br.com.intuitivecare.ans.util.ZipExtractor;
+
 public class Main {
 
-	// URL base da API publica da ANS para demonstracoes contabeis
+	// URL base da API publica da ANS para demonstrações contabeis
 	private static final String BASE_URL = "https://dadosabertos.ans.gov.br/FTP/PDA/demonstracoes_contabeis/";
 	
 	public static void main(String[] args) throws Exception {
@@ -52,7 +57,7 @@ public class Main {
 			zips.add(zipMatcher.group());
 		}
 		
-		zips = new ArrayList<>(new java.util.HashSet<>(zips));
+		zips = new ArrayList<>(new HashSet<>(zips));
 		
 		// Ordena alfabeticamente os arquivos zip
 		Collections.sort(zips);
@@ -61,23 +66,39 @@ public class Main {
 		
 		System.out.println("Trimestres encontrados: " + lastThree);
 		
-		// Cria pasta para downloads
 		Files.createDirectories(Paths.get("downloads"));
 		
 		for (String zip : lastThree) {
 			String fileUrl = yearUrl + zip;
-			Path dest = Paths.get("downloads" , zip);
+			Path zipPath = Paths.get("downloads" , zip);
 			
-			// Faz o download do arquivo zip
 			try (InputStream in = new URL(fileUrl).openStream()){
-				Files.copy(in,  dest, StandardCopyOption.REPLACE_EXISTING);
+				Files.copy(in,  zipPath, StandardCopyOption.REPLACE_EXISTING);
 			}
 			
 			System.out.println("Baixado: " + zip);
+			
+			// Extração do zip
+			Path extractDir = Paths.get("downloads/extraidos", zip.replace(".zip", ""));
+           
+			ZipExtractor.unzip(zipPath, extractDir);
+
+            System.out.println("Extraído: " + zip);
+            
+            // Processa arquivos dentro da pasta extraida
+            Files.walk(extractDir)
+            .filter(Files::isRegularFile)
+            .forEach(file -> {
+                try {
+                    FileProcessor.processFile(file);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+
 		}
 	}
 	
-	// Metodo auxiliar para ler o conteúdo de uma URL como String
 	private static String readUrl(String url) throws Exception{
 		try (InputStream in = new URL(url).openStream()){
 			return new String(in.readAllBytes());
