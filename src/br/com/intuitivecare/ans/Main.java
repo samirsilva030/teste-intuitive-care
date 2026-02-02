@@ -1,107 +1,85 @@
 package br.com.intuitivecare.ans;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.*;
 
+import br.com.intuitivecare.ans.model.Operadora;
+import br.com.intuitivecare.ans.service.ConsolidationService;
 import br.com.intuitivecare.ans.util.FileProcessor;
+import br.com.intuitivecare.ans.util.ZipCompressor;
 import br.com.intuitivecare.ans.util.ZipExtractor;
 
 public class Main {
 
-	// URL base da API publica da ANS para demonstrações contabeis
-	private static final String BASE_URL = "https://dadosabertos.ans.gov.br/FTP/PDA/demonstracoes_contabeis/";
-	
-	public static void main(String[] args) throws Exception {
-		
-		// Ler o HTML da página principal e busca os anos disponíveis
-		String html = readUrl(BASE_URL);
-		
-		// Regex para encontrar anos no formato 20XX
-		Pattern yearPattern = Pattern.compile("(20\\d{2})");
-		Matcher yearMatcher = yearPattern.matcher(html);
-		
-		List<Integer> years = new ArrayList<>();
-		
-		// Adiciona cada ano encontrado na lista
-		while (yearMatcher.find()) {
-			years.add(Integer.parseInt(yearMatcher.group(1)));
-		}
-		
-		// Seleciona o ano mais recente
-		int latestYear = Collections.max(years);
-		System.out.println("Ano mais recente: " + latestYear);
-		
-		// Monta a URL do ano mais recente
-		String yearUrl = BASE_URL + latestYear + "/";
-		String yearHtml = readUrl(yearUrl);
-		
-		// Regex para encontrar arquivos zip do ano mais recente
-		Pattern zipPattern = Pattern.compile("\\dT" + latestYear + "\\.zip");
-		Matcher zipMatcher = zipPattern.matcher(yearHtml);
-		
-		List<String> zips = new ArrayList<>();
-		
-		// Adiciona cada arquivo zip encontrado na lista
-		while (zipMatcher.find()) {
-			zips.add(zipMatcher.group());
-		}
-		
-		zips = new ArrayList<>(new HashSet<>(zips));
-		
-		// Ordena alfabeticamente os arquivos zip
-		Collections.sort(zips);
-		// Seleciona os 3 últimos trimestres
-		List<String> lastThree = zips.subList(Math.max(0, zips.size() - 3), zips.size());
-		
-		System.out.println("Trimestres encontrados: " + lastThree);
-		
-		Files.createDirectories(Paths.get("downloads"));
-		
-		for (String zip : lastThree) {
-			String fileUrl = yearUrl + zip;
-			Path zipPath = Paths.get("downloads" , zip);
-			
-			try (InputStream in = new URL(fileUrl).openStream()){
-				Files.copy(in,  zipPath, StandardCopyOption.REPLACE_EXISTING);
-			}
-			
-			System.out.println("Baixado: " + zip);
-			
-			// Extração do zip
-			Path extractDir = Paths.get("downloads/extraidos", zip.replace(".zip", ""));
-           
-			ZipExtractor.unzip(zipPath, extractDir);
+    // URLs base dos dados da ANS
+    private static final String BASE_URL_DEMONSTRACOES = "https://dadosabertos.ans.gov.br/FTP/PDA/demonstracoes_contabeis/2025/";
 
-            System.out.println("Extraído: " + zip);
-            
-            // Processa arquivos dentro da pasta extraida
-            Files.walk(extractDir)
-            .filter(Files::isRegularFile)
-            .forEach(file -> {
-                try {
-                    FileProcessor.processFile(file);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
+    private static final String URL_OPERADORAS = "https://dadosabertos.ans.gov.br/FTP/PDA/operadoras_de_plano_de_saude_ativas/Relatorio_cadop.csv";
 
-		}
-	}
-	
-	private static String readUrl(String url) throws Exception{
-		try (InputStream in = new URL(url).openStream()){
-			return new String(in.readAllBytes());
-		}
-	}
+    public static void main(String[] args) throws Exception {
+
+        // Diretorio local para download e processamento
+        Path downloadsDir = Paths.get("downloads");
+        Files.createDirectories(downloadsDir);
+
+        // 1. Baixa e carrega as operadoras
+        Path cadopPath = downloadsDir.resolve("Relatorio_cadop.csv");
+        
+        FileProcessor.downloadFile(URL_OPERADORAS, cadopPath);
+        
+        Map<String, Operadora> operadoras = FileProcessor.loadOperadoras(cadopPath);
+
+        // 2. Define os trimestres a serem processados
+        List<String> trimestres = List.of("1T2025.zip", "2T2025.zip", "3T2025.zip");
+
+        ConsolidationService service = new ConsolidationService();
+
+        // Processa cada trimestre
+        for (String zipName : trimestres) {
+
+            Path zipPath = downloadsDir.resolve(zipName);
+            String zipUrl = BASE_URL_DEMONSTRACOES + zipName;
+
+            FileProcessor.downloadFile(zipUrl, zipPath);
+
+            Path extractDir = downloadsDir.resolve(zipName.replace(".zip", ""));
+            ZipExtractor.unzip(zipPath, extractDir);
+
+            // Processa todos os csv extraídos
+            Files.list(extractDir).filter(Files::isRegularFile).forEach(file -> {
+                        try {
+                            int trimestreNum = Integer.parseInt(zipName.substring(0, 1));
+                            FileProcessor.processTrimestre(file, 2025, trimestreNum, operadoras, service);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
+        }
+
+        // 3. Gera o csv consolidado final
+        Path consolidatedPath = downloadsDir.resolve("consolidado_despesas.csv");
+
+        try (var writer = Files.newBufferedWriter(consolidatedPath)) {
+
+            writer.write("CNPJ;RazaoSocial;Trimestre;Ano;ValorDespesas\n");
+
+            for (var record : service.getConsolidatedRecords()) {
+                writer.write(String.join(";", record.getCnpj(), record.getRazaoSocial(), String.valueOf(record.getTrimestre()), String.valueOf(record.getAno()), record.getValorDespesas().toString()));
+                writer.write("\n");
+            }
+        }
+
+        System.out.println("Consolidação final gerada: " + consolidatedPath);
+        System.out.println("Total de registros consolidados: " + service.getConsolidatedRecords().size());
+        
+     // 4. Compacta o CSV final
+        Path zipFinal = downloadsDir.resolve("consolidado_despesas.zip");
+        ZipCompressor.zip(consolidatedPath, zipFinal);
+
+        System.out.println("Arquivo ZIP final gerado: " + zipFinal);
+    }
 }
+
+
