@@ -23,10 +23,20 @@ public class ConsolidationService {
             
             BigDecimal novoValor = existing.getValorDespesas().add(record.getValorDespesas());
             
-            consolidated.put(key, new ConsolidatedRecord(existing.getCnpj(), existing.getRazaoSocial(), existing.getTrimestre(), existing.getAno(), novoValor));
+            // Aqui passamos todos os campos novos para o construtor atualizado
+            consolidated.put(key, new ConsolidatedRecord(
+                existing.getCnpj(), 
+                existing.getRazaoSocial(), 
+                existing.getRegistroAns(),
+                existing.getModalidade(),
+                existing.getUf(),
+                existing.getTrimestre(), 
+                existing.getAno(), 
+                novoValor
+            ));
             
         } else {
-        	
+            
             consolidated.put(key, record);
         }
     }
@@ -36,6 +46,5 @@ public class ConsolidationService {
         return consolidated.values();
     }
 }
-
 
 

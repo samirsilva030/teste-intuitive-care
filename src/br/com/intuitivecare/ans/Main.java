@@ -1,5 +1,6 @@
 package br.com.intuitivecare.ans;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,7 +26,7 @@ public class Main {
         Path downloadsDir = Paths.get("downloads");
         Files.createDirectories(downloadsDir);
 
-        // 1. Baixa e carrega as operadoras
+        // 1. Baixa e carrega as operadoras (Enriquecimento: traz Modalidade e UF)
         Path cadopPath = downloadsDir.resolve("Relatorio_cadop.csv");
         
         FileProcessor.downloadFile(URL_OPERADORAS, cadopPath);
@@ -43,31 +44,47 @@ public class Main {
             Path zipPath = downloadsDir.resolve(zipName);
             String zipUrl = BASE_URL_DEMONSTRACOES + zipName;
 
-            FileProcessor.downloadFile(zipUrl, zipPath);
+            try {
+                FileProcessor.downloadFile(zipUrl, zipPath);
 
-            Path extractDir = downloadsDir.resolve(zipName.replace(".zip", ""));
-            ZipExtractor.unzip(zipPath, extractDir);
+                Path extractDir = downloadsDir.resolve(zipName.replace(".zip", ""));
+                ZipExtractor.unzip(zipPath, extractDir);
 
-            // Processa todos os csv extraídos
-            Files.list(extractDir).filter(Files::isRegularFile).forEach(file -> {
-                        try {
-                            int trimestreNum = Integer.parseInt(zipName.substring(0, 1));
-                            FileProcessor.processTrimestre(file, 2025, trimestreNum, operadoras, service);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
+                // Processa todos os csv extraídos
+                Files.list(extractDir).filter(Files::isRegularFile).forEach(file -> {
+                            try {
+                                // Extrai o número do trimestre do nome do arquivo (ex: "1T2025" -> 1)
+                                int trimestreNum = Integer.parseInt(zipName.substring(0, 1));
+                                FileProcessor.processTrimestre(file, 2025, trimestreNum, operadoras, service);
+                            } catch (Exception e) {
+                                System.err.println("Erro ao processar arquivo: " + file.getFileName());
+                                e.printStackTrace();
+                            }
+                        });
+            } catch (Exception e) {
+                System.err.println("Erro ao processar trimestre: " + zipName);
+            }
         }
 
-        // 3. Gera o csv consolidado final
+        // 3. Gera o csv consolidado final com Enriquecimento de Dados (Requisito 2.2)
         Path consolidatedPath = downloadsDir.resolve("consolidado_despesas.csv");
 
-        try (var writer = Files.newBufferedWriter(consolidatedPath)) {
+        try (var writer = Files.newBufferedWriter(consolidatedPath, StandardCharsets.UTF_8)) {
 
-            writer.write("CNPJ;RazaoSocial;Trimestre;Ano;ValorDespesas\n");
+            // Cabeçalho atualizado com colunas extras
+            writer.write("CNPJ;RazaoSocial;RegistroANS;Modalidade;UF;Trimestre;Ano;ValorDespesas\n");
 
             for (var record : service.getConsolidatedRecords()) {
-                writer.write(String.join(";", record.getCnpj(), record.getRazaoSocial(), String.valueOf(record.getTrimestre()), String.valueOf(record.getAno()), record.getValorDespesas().toString()));
+                writer.write(String.join(";", 
+                    record.getCnpj(), 
+                    record.getRazaoSocial(), 
+                    record.getRegistroAns(),
+                    record.getModalidade(),
+                    record.getUf(),
+                    String.valueOf(record.getTrimestre()), 
+                    String.valueOf(record.getAno()), 
+                    record.getValorDespesas().toString()
+                ));
                 writer.write("\n");
             }
         }
@@ -86,5 +103,7 @@ public class Main {
         
     }
 }
+
+
 
 

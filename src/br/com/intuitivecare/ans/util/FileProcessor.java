@@ -8,6 +8,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,150 +18,127 @@ import br.com.intuitivecare.ans.service.ConsolidationService;
 
 public class FileProcessor {
 
-    // Carrega as operadoras a partir do csv Relatorio_cadop
+    /**
+     * Carrega as operadoras mapeando as colunas dinamicamente pelos nomes.
+     * Isso evita que campos como "Bairro" entrem no lugar da "UF".
+     */
     public static Map<String, Operadora> loadOperadoras(Path file) throws IOException {
-
         Map<String, Operadora> operadoras = new HashMap<>();
 
-        try (BufferedReader br = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+        // ISO_8859_1 é essencial para os arquivos da ANS não virem com interrogações no lugar de acentos
+        try (BufferedReader br = Files.newBufferedReader(file, StandardCharsets.ISO_8859_1)) {
+            String headerLine = br.readLine();
+            if (headerLine == null) return operadoras;
 
-            // Ignora cabeçalho
-            String header = br.readLine();
-            if (header == null) return operadoras;
+            // Remove o caractere invisível BOM que a ANS costuma colocar no início do arquivo
+            headerLine = headerLine.replace("\uFEFF", "");
+            String[] headers = headerLine.split(";", -1);
+
+            // Índices que vamos descobrir
+            int idxReg = -1, idxCnpj = -1, idxRazao = -1, idxMod = -1, idxUf = -1;
+
+            for (int i = 0; i < headers.length; i++) {
+                String h = headers[i].trim().toUpperCase();
+                // Verificação precisa para não confundir 'UF' com 'SUFIXO' ou 'LOGRADOURO'
+                if (h.equals("REGISTRO_ANS")) idxReg = i;
+                else if (h.equals("CNPJ")) idxCnpj = i;
+                else if (h.equals("RAZAO_SOCIAL")) idxRazao = i;
+                else if (h.equals("MODALIDADE")) idxMod = i;
+                else if (h.equals("UF")) idxUf = i;
+            }
+
+            // Fallback caso o cabeçalho mude: se não achou pelo nome, usa as posições padrão da ANS
+            if (idxReg == -1) idxReg = 0;
+            if (idxCnpj == -1) idxCnpj = 1;
+            if (idxRazao == -1) idxRazao = 2;
+            if (idxMod == -1) idxMod = 5;
+            if (idxUf == -1) idxUf = 12;
 
             String line;
             while ((line = br.readLine()) != null) {
-
-                // csv separado por ;
+                if (line.trim().isEmpty()) continue;
                 String[] cols = line.split(";", -1);
-                if (cols.length < 3) continue;
 
-                String registro = cols[0].trim();
-                String cnpj = cols[1].trim();
-                String razao = cols[2].trim();
+                if (cols.length <= Math.max(idxReg, idxUf)) continue;
 
-                // Mapeia pelo registro ANS
-                operadoras.put(registro, new Operadora(registro, cnpj, razao));
+                // Limpa as aspas (") que a ANS coloca em volta dos nomes
+                String registro = cols[idxReg].replace("\"", "").trim();
+                String cnpj = cols[idxCnpj].replace("\"", "").trim();
+                String razao = cols[idxRazao].replace("\"", "").trim();
+                String modalidade = cols[idxMod].replace("\"", "").trim();
+                String uf = cols[idxUf].replace("\"", "").trim();
+
+                if (!registro.isEmpty()) {
+                    operadoras.put(registro, new Operadora(registro, cnpj, razao, modalidade, uf));
+                }
             }
         }
-
         System.out.println("Operadoras carregadas: " + operadoras.size());
         return operadoras;
     }
 
-    // Processa um arquivo csv de um trimestre especifico
     public static void processTrimestre(Path file, int ano, int trimestre,
                                         Map<String, Operadora> operadoras,
                                         ConsolidationService service) throws IOException {
 
-        try (BufferedReader br = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+        try (BufferedReader br = Files.newBufferedReader(file, StandardCharsets.ISO_8859_1)) {
+            String headerLine = br.readLine();
+            if (headerLine == null) return;
 
-            // Ler cabeçalho para identificar colunas
-            String header = br.readLine();
-            if (header == null) return;
+            headerLine = headerLine.replace("\uFEFF", "");
+            String[] headers = headerLine.split(";", -1);
 
-            String[] headers = header.split(";", -1);
+            int idxReg = -1, idxDesc = -1, idxValor = -1;
 
-            int regAnsIdx = -1;
-            int descricaoIdx = -1;
-            int valorFinalIdx = -1;
-
-            // Descobre os índices das colunas necessárias
             for (int i = 0; i < headers.length; i++) {
-                String h = headers[i].trim().toLowerCase();
-                if (h.contains("reg_ans")) regAnsIdx = i;
-                else if (h.contains("descricao")) descricaoIdx = i;
-                else if (h.contains("vl_saldo_final")) valorFinalIdx = i;
+                String h = headers[i].trim().toUpperCase();
+                if (h.contains("REG_ANS")) idxReg = i;
+                else if (h.contains("DESCRICAO")) idxDesc = i;
+                else if (h.contains("VL_SALDO_FINAL")) idxValor = i;
             }
 
-            // Se faltar coluna obrigatoria, ignora o arquivo
-            if (regAnsIdx == -1 || descricaoIdx == -1 || valorFinalIdx == -1) {
-                System.out.println("Arquivo ignorado (colunas obrigatórias não encontradas): " + file.getFileName());
-                return;
-            }
+            if (idxReg == -1 || idxDesc == -1 || idxValor == -1) return;
 
-            int linhasRelevantes = 0;
+            int count = 0;
             String line;
-
             while ((line = br.readLine()) != null) {
-
                 String[] cols = line.split(";", -1);
-                if (cols.length <= valorFinalIdx) continue;
+                if (cols.length <= idxValor) continue;
 
-                // Filtra apenas despesas com eventos ou sinistros
-                String descricao = cols[descricaoIdx];
+                if (!isDespesaEventoOuSinistro(cols[idxDesc])) continue;
 
-                if (!isDespesaEventoOuSinistro(descricao)) continue;
-
-                String regAns = cols[regAnsIdx].trim();
-
+                String regAns = cols[idxReg].replace("\"", "").trim();
                 Operadora op = operadoras.get(regAns);
 
-                if (op == null) continue;
+                if (op != null) {
+                    try {
+                        String valStr = cols[idxValor].replace("\"", "").replace(",", ".");
+                        BigDecimal valor = new BigDecimal(valStr);
 
-                BigDecimal valor;
-
-                try {
-                    valor = new BigDecimal(cols[valorFinalIdx].replace(",", "."));
-                } catch (Exception e) {
-                    continue;
+                        if (valor.compareTo(BigDecimal.ZERO) > 0) {
+                            service.addRecord(new ConsolidatedRecord(
+                                op.getCnpj(), op.getRazaoSocial(), op.getRegistro(),
+                                op.getModalidade(), op.getUf(), trimestre, ano, valor
+                            ));
+                            count++;
+                        }
+                    } catch (Exception e) {}
                 }
-
-                // IGNORA valores zerados ou negativos (inconsistência)
-                if (valor.compareTo(BigDecimal.ZERO) <= 0) continue;
-
-                // envia o registro para consolidação
-                service.addRecord(
-                        new ConsolidatedRecord(
-                                op.getCnpj(),
-                                op.getRazaoSocial(),
-                                trimestre,
-                                ano,
-                                valor
-                        )
-                );
-
-                linhasRelevantes++;
             }
-
-            if (linhasRelevantes > 0) {
-                System.out.println("Arquivo processado: " + file.getFileName()
-                        + " -> Linhas relevantes: " + linhasRelevantes);
-            } else {
-                System.out.println("Arquivo ignorado (nenhuma linha de despesa relevante): "
-                        + file.getFileName());
-            }
+            if (count > 0) System.out.println("Processado " + file.getFileName() + ": " + count + " linhas.");
         }
     }
 
-    // Define o que é considerado despesa com evento ou sinistro
-    private static boolean isDespesaEventoOuSinistro(String descricao) {
-
-        if (descricao == null || descricao.isEmpty()) return false;
-
-        // Normalização para evitar problemas de escrita/acento
-        descricao = descricao.toLowerCase()
-                .replaceAll("[^a-z0-9\\s]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
-
-        boolean hasDespesa = descricao.contains("despesa");
-        boolean hasEvento = descricao.contains("eventos");
-        boolean hasSinistro = descricao.contains("sinistro");
-
-        return hasDespesa && (hasEvento || hasSinistro);
+    private static boolean isDespesaEventoOuSinistro(String desc) {
+        if (desc == null) return false;
+        String d = desc.toLowerCase();
+        return d.contains("despesa") && (d.contains("eventos") || d.contains("sinistro"));
     }
 
-    // Baixa um arquivo (csv ou zip) a partir de uma URL
-    public static Path downloadFile(String urlStr, Path dest) throws IOException {
-
+    public static void downloadFile(String urlStr, Path dest) throws IOException {
         try (InputStream in = new URL(urlStr).openStream()) {
-            Files.copy(in, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);
         }
-
-        System.out.println("Baixado: " + dest.getFileName());
-        return dest;
+        System.out.println("Download concluído: " + dest.getFileName());
     }
 }
-
-
