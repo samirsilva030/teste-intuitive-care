@@ -7,6 +7,7 @@ import java.util.*;
 
 import br.com.intuitivecare.ans.model.Operadora;
 import br.com.intuitivecare.ans.service.ConsolidationService;
+import br.com.intuitivecare.ans.service.DataValidationService;
 import br.com.intuitivecare.ans.util.FileProcessor;
 import br.com.intuitivecare.ans.util.ZipCompressor;
 import br.com.intuitivecare.ans.util.ZipExtractor;
@@ -74,11 +75,15 @@ public class Main {
         System.out.println("Consolidação final gerada: " + consolidatedPath);
         System.out.println("Total de registros consolidados: " + service.getConsolidatedRecords().size());
         
-     // 4. Compacta o CSV final
+        // Aqui validamos o CNPJ, valores e strings do arquivo que acabamos de criar
+        DataValidationService.validateConsolidatedFile(consolidatedPath);
+        
+        // 4. Compacta o csv final
         Path zipFinal = downloadsDir.resolve("consolidado_despesas.zip");
         ZipCompressor.zip(consolidatedPath, zipFinal);
 
         System.out.println("Arquivo ZIP final gerado: " + zipFinal);
+        
     }
 }
 
