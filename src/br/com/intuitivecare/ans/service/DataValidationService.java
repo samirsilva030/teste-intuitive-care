@@ -15,7 +15,7 @@ public class DataValidationService {
         System.out.println("\n--- INICIANDO VALIDAÇÃO DO ARQUIVO CONSOLIDADO ---");
         
         try (BufferedReader br = Files.newBufferedReader(csvPath)) {
-            String line = br.readLine(); // Lê o cabeçalho
+            String line = br.readLine(); 
             int totalLinhas = 0;
             int errosEncontrados = 0;
 
@@ -23,7 +23,7 @@ public class DataValidationService {
                 totalLinhas++;
                 String[] cols = line.split(";", -1);
                 
-                // Mapeamento atualizado conforme o novo CSV (Requisito 2.2)
+                // Mapeamento atualizado conforme o novo csv (Requisito 2.2)
                 // 0:CNPJ; 1:RazaoSocial; 2:RegistroANS; 3:Modalidade; 4:UF; 5:Trimestre; 6:Ano; 7:ValorDespesas
                 if (cols.length < 8) {
                     System.err.println("ERRO: Linha com colunas insuficientes na linha: " + totalLinhas);
@@ -33,7 +33,7 @@ public class DataValidationService {
 
                 String cnpj = cols[0];
                 String razaoSocial = cols[1];
-                String valorStr = cols[7]; // O valor agora é a 8ª coluna (índice 7)
+                String valorStr = cols[7]; 
 
                 // Validação de Razão Social
                 if (razaoSocial == null || razaoSocial.trim().isEmpty()) {

@@ -7,8 +7,10 @@ import java.nio.file.Paths;
 import java.util.*;
 
 import br.com.intuitivecare.ans.model.Operadora;
+import br.com.intuitivecare.ans.model.AggregationStats; // Adicionado
 import br.com.intuitivecare.ans.service.ConsolidationService;
 import br.com.intuitivecare.ans.service.DataValidationService;
+import br.com.intuitivecare.ans.service.AggregationService; // Adicionado para o Req 2.3
 import br.com.intuitivecare.ans.util.FileProcessor;
 import br.com.intuitivecare.ans.util.ZipCompressor;
 import br.com.intuitivecare.ans.util.ZipExtractor;
@@ -21,7 +23,8 @@ public class Main {
     private static final String URL_OPERADORAS = "https://dadosabertos.ans.gov.br/FTP/PDA/operadoras_de_plano_de_saude_ativas/Relatorio_cadop.csv";
 
     public static void main(String[] args) throws Exception {
-
+    	
+    	
         // Diretorio local para download e processamento
         Path downloadsDir = Paths.get("downloads");
         Files.createDirectories(downloadsDir);
@@ -88,6 +91,8 @@ public class Main {
                 writer.write("\n");
             }
         }
+        
+        Scanner sc = new Scanner(System.in);
 
         System.out.println("Consolidação final gerada: " + consolidatedPath);
         System.out.println("Total de registros consolidados: " + service.getConsolidatedRecords().size());
@@ -95,15 +100,26 @@ public class Main {
         // Aqui validamos o CNPJ, valores e strings do arquivo que acabamos de criar
         DataValidationService.validateConsolidatedFile(consolidatedPath);
         
-        // 4. Compacta o csv final
-        Path zipFinal = downloadsDir.resolve("consolidado_despesas.zip");
-        ZipCompressor.zip(consolidatedPath, zipFinal);
+        // Agregação e Estatísticas
+        System.out.println("\nIniciando Agregação de Dados...");
+        AggregationService aggService = new AggregationService();
+        
+        // Processa agregação e captura o mapa para salvar em arquivo
+        Map<String, AggregationStats> statsMap = aggService.processarAgregacao(new ArrayList<>(service.getConsolidatedRecords()));
+        
+        // Salva o resultado em um novo csv conforme o desafio
+        Path aggregatedPath = downloadsDir.resolve("despesas_agregadas.csv");
+        aggService.salvarCsvAgregado(statsMap, aggregatedPath);
+        System.out.println("Arquivo de agregação gerado: " + aggregatedPath);
+        
+        // Compacta o arquivo final conforme regra de nomenclatura: Teste_{seu_nome}.zip
+        System.out.println("Digite o Seu nome");
+        String seuNome = sc.nextLine() ;
+        Path zipFinal = downloadsDir.resolve("Teste_" + seuNome + ".zip");
+        ZipCompressor.zip(aggregatedPath, zipFinal);
 
         System.out.println("Arquivo ZIP final gerado: " + zipFinal);
         
+        sc.close();
     }
 }
-
-
-
-

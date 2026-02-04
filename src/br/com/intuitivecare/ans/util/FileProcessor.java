@@ -30,15 +30,16 @@ public class FileProcessor {
             String headerLine = br.readLine();
             if (headerLine == null) return operadoras;
 
-            // Remove o caractere invisível BOM que a ANS costuma colocar no início do arquivo
+            // Remove o caractere invisível BOM que a ANS costuma colocar no inicio do arquivo
             headerLine = headerLine.replace("\uFEFF", "");
             String[] headers = headerLine.split(";", -1);
 
-            // Índices que vamos descobrir
+            // Indices que vamos descobrir
             int idxReg = -1, idxCnpj = -1, idxRazao = -1, idxMod = -1, idxUf = -1;
 
             for (int i = 0; i < headers.length; i++) {
                 String h = headers[i].trim().toUpperCase();
+                
                 // Verificação precisa para não confundir 'UF' com 'SUFIXO' ou 'LOGRADOURO'
                 if (h.equals("REGISTRO_ANS")) idxReg = i;
                 else if (h.equals("CNPJ")) idxCnpj = i;
@@ -76,6 +77,11 @@ public class FileProcessor {
         System.out.println("Operadoras carregadas: " + operadoras.size());
         return operadoras;
     }
+    
+    /**
+     * Processa os dados financeiros trimestrais e realiza o Enriquecimento (Join) 
+     * com os dados cadastrais em memoria.
+     */
 
     public static void processTrimestre(Path file, int ano, int trimestre,
                                         Map<String, Operadora> operadoras,
@@ -128,13 +134,15 @@ public class FileProcessor {
             if (count > 0) System.out.println("Processado " + file.getFileName() + ": " + count + " linhas.");
         }
     }
-
+    
+    // Validação baseada em palavras-chave para identificar linhas de despesa relevantes.
     private static boolean isDespesaEventoOuSinistro(String desc) {
         if (desc == null) return false;
         String d = desc.toLowerCase();
         return d.contains("despesa") && (d.contains("eventos") || d.contains("sinistro"));
     }
-
+    
+    // Realiza o download de arquivos via HTTP.
     public static void downloadFile(String urlStr, Path dest) throws IOException {
         try (InputStream in = new URL(urlStr).openStream()) {
             Files.copy(in, dest, StandardCopyOption.REPLACE_EXISTING);

@@ -7,6 +7,10 @@ import java.nio.file.Path;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * Utilitário para compactação de arquivos no formato zip.
+ * Responsavel por gerar o pacote final de entrega (Requisito 3).
+ */
 public class ZipCompressor {
 
     public static void zip(Path file, Path zipDest) throws IOException {
