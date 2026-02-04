@@ -9,7 +9,7 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Utilitário para compactação de arquivos no formato zip.
- * Responsavel por gerar o pacote final de entrega (Requisito 3).
+ * Responsavel por gerar o pacote final de entrega.
  */
 public class ZipCompressor {
 

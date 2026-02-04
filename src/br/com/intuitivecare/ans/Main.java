@@ -29,14 +29,14 @@ public class Main {
         Path downloadsDir = Paths.get("downloads");
         Files.createDirectories(downloadsDir);
 
-        // 1. Baixa e carrega as operadoras (Enriquecimento: traz Modalidade e UF)
+        // Baixa e carrega as operadoras (Enriquecimento: traz Modalidade e UF)
         Path cadopPath = downloadsDir.resolve("Relatorio_cadop.csv");
         
         FileProcessor.downloadFile(URL_OPERADORAS, cadopPath);
         
         Map<String, Operadora> operadoras = FileProcessor.loadOperadoras(cadopPath);
 
-        // 2. Define os trimestres a serem processados
+        // Define os trimestres a serem processados
         List<String> trimestres = List.of("1T2025.zip", "2T2025.zip", "3T2025.zip");
 
         ConsolidationService service = new ConsolidationService();
@@ -86,8 +86,7 @@ public class Main {
                     record.getUf(),
                     String.valueOf(record.getTrimestre()), 
                     String.valueOf(record.getAno()), 
-                    record.getValorDespesas().toString()
-                ));
+                    record.getValorDespesas().toString()));
                 writer.write("\n");
             }
         }
@@ -119,6 +118,12 @@ public class Main {
         ZipCompressor.zip(aggregatedPath, zipFinal);
 
         System.out.println("Arquivo ZIP final gerado: " + zipFinal);
+
+        System.out.println("\n--- CONSULTA AO BANCO DE DADOS (ITEM 3.4) ---");
+        br.com.intuitivecare.ans.dao.EstatisticaDAO dao = new br.com.intuitivecare.ans.dao.EstatisticaDAO();
+        int totalBanco = dao.buscarOperadorasAcimaDaMedia();
+
+        System.out.println("O Banco de Dados retornou: " + totalBanco + " operadoras acima da média.");
         
         sc.close();
     }

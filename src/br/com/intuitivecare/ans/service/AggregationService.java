@@ -12,10 +12,8 @@ import java.util.stream.Collectors;
 
 public class AggregationService {
 
-    /**
-     * Agrupa dados e imprime o Top 10 operadoras por despesa.
-     * @param records Coleção de registros consolidados.
-     */
+    
+    //Agrupa dados e imprime o Top 10 operadoras por despesa.
     public Map<String, AggregationStats> processarAgregacao(Collection<ConsolidatedRecord> records) {
         Map<String, AggregationStats> agregados = new HashMap<>();
 
@@ -32,11 +30,10 @@ public class AggregationService {
         // Estratégia de Ordenação: In-Memory Sort usando Stream API
         // Justificativa: Volume de dados tratável em RAM, priorizando performance de CPU.
         agregados.entrySet().stream()
-                .sorted((e1, e2) -> e2.getValue().getTotal().compareTo(e1.getValue().getTotal())) // Decrescente
-                .limit(10) // Limita para não inundar o log
+                .sorted((e1, e2) -> e2.getValue().getTotal().compareTo(e1.getValue().getTotal()))
+                .limit(10) //
                 .forEach(entry -> {
                     AggregationStats stats = entry.getValue();
-                    // Locale.US garante o ponto decimal para evitar problemas de encoding/formatação
                     System.out.printf(Locale.US, "Operadora/UF: %-55s | Total: R$ %15.2f | Média: R$ %15.2f | Desvio: %10.2f%n",
                             entry.getKey(), 
                             stats.getTotal(), 
@@ -47,12 +44,11 @@ public class AggregationService {
         System.out.println("=".repeat(100));
         System.out.println("Nota: Exibindo apenas o Top 10 para clareza do log. O arquivo CSV contém a base completa.");
         
-        return agregados; // Retorno adicionado para permitir a gravação do CSV
+        return agregados; // Retorno adicionado para permitir a gravação do csv
     }
 
-    /**
-     * Salva o resultado agregado em CSV conforme requisito 2.3.
-     */
+    
+    //Salva o resultado agregado em csv conforme requisito
     public void salvarCsvAgregado(Map<String, AggregationStats> agregados, Path targetPath) throws Exception {
         try (BufferedWriter writer = Files.newBufferedWriter(targetPath, StandardCharsets.UTF_8)) {
             writer.write("RazaoSocial_UF;TotalDespesas;MediaTrimestral;DesvioPadrao\n");

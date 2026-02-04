@@ -22,7 +22,7 @@ public class ZipExtractor {
 
             ZipEntry entry;
 
-            // Percorre todos os arquivos/diretórios dentro do ZIP
+            // Percorre todos os arquivos/diretórios dentro do zip
             while ((entry = zis.getNextEntry()) != null) {
 
                 // Resolve o caminho final do arquivo extraído
